@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,8 @@ import { Empleado } from "@/types/nomina";
 import { Plus, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEmpleados } from "@/hooks/use-empleados";
+import { useToast } from "@/hooks/use-toast";
 
 interface NominaModuleProps {
   empleados: Empleado[];
@@ -15,8 +17,9 @@ interface NominaModuleProps {
 }
 
 export default function NominaModule({ empleados, onUpdate, empresa }: NominaModuleProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [nombreInputs, setNombreInputs] = useState<Record<string, string>>({});
+  const { saveEmpleado, deleteEmpleado, loading: loadingEmpleados } = useEmpleados();
+  const { toast } = useToast();
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
   const calcularAplicaFondoReserva = (fechaIngreso: string): boolean => {
     if (!fechaIngreso) return false;
@@ -53,7 +56,7 @@ export default function NominaModule({ empleados, onUpdate, empresa }: NominaMod
     onUpdate(updated);
   };
 
-  const handleUpdate = (id: string, field: keyof Empleado, value: any) => {
+  const handleUpdate = async (id: string, field: keyof Empleado, value: any) => {
     const empleado = empleados.find((e) => e.id === id);
     if (!empleado) return;
 
@@ -63,14 +66,45 @@ export default function NominaModule({ empleados, onUpdate, empresa }: NominaMod
       updates.tieneFondoReserva = calcularAplicaFondoReserva(value);
     }
 
+    const updatedEmpleado = { ...empleado, ...updates };
     const updated = empleados.map((emp) =>
-      emp.id === id ? { ...emp, ...updates } : emp
+      emp.id === id ? updatedEmpleado : emp
     );
     onUpdate(updated);
+
+    setSavingIds(prev => new Set(prev).add(id));
+    try {
+      await saveEmpleado(updatedEmpleado);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el cambio",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    onUpdate(empleados.filter((emp) => emp.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteEmpleado(id);
+      onUpdate(empleados.filter((emp) => emp.id !== id));
+      toast({
+        title: "Empleado eliminado",
+        description: "El empleado se eliminó correctamente",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el empleado",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -94,7 +128,8 @@ export default function NominaModule({ empleados, onUpdate, empresa }: NominaMod
             <thead>
               <tr className="border-b bg-muted">
                 <th className="text-left p-4 text-sm font-bold whitespace-nowrap">No.</th>
-                <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[250px]">Nombre Completo</th>
+                <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[200px]">Apellidos</th>
+                <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[200px]">Nombres</th>
                 <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[150px]">Cédula</th>
                 <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[180px]">Cargo</th>
                 <th className="text-left p-4 text-sm font-bold whitespace-nowrap min-w-[180px]">Asignación</th>
@@ -114,29 +149,18 @@ export default function NominaModule({ empleados, onUpdate, empresa }: NominaMod
                   <td className="p-4 text-sm">{index + 1}</td>
                   <td className="p-4">
                     <Input
-                      value={nombreInputs[empleado.id] !== undefined ? nombreInputs[empleado.id] : `${empleado.apellidos} ${empleado.nombres}`.trim()}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setNombreInputs({ ...nombreInputs, [empleado.id]: value });
-                      }}
-                      onBlur={(e) => {
-                        const fullName = e.target.value.trim();
-                        const lastSpace = fullName.lastIndexOf(' ');
-
-                        if (lastSpace > 0) {
-                          handleUpdate(empleado.id, "apellidos", fullName.substring(0, lastSpace));
-                          handleUpdate(empleado.id, "nombres", fullName.substring(lastSpace + 1));
-                        } else {
-                          handleUpdate(empleado.id, "apellidos", fullName);
-                          handleUpdate(empleado.id, "nombres", "");
-                        }
-
-                        const newInputs = { ...nombreInputs };
-                        delete newInputs[empleado.id];
-                        setNombreInputs(newInputs);
-                      }}
-                      className="h-10 text-sm min-w-[250px]"
-                      placeholder="Apellidos Nombres"
+                      value={empleado.apellidos}
+                      onChange={(e) => handleUpdate(empleado.id, "apellidos", e.target.value)}
+                      className="h-10 text-sm min-w-[200px]"
+                      placeholder="Apellidos"
+                    />
+                  </td>
+                  <td className="p-4">
+                    <Input
+                      value={empleado.nombres}
+                      onChange={(e) => handleUpdate(empleado.id, "nombres", e.target.value)}
+                      className="h-10 text-sm min-w-[200px]"
+                      placeholder="Nombres"
                     />
                   </td>
                   <td className="p-4">

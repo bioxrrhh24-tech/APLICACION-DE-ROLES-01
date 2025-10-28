@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DatosModule from "@/components/nomina/DatosModule";
 import NominaModule from "@/components/nomina/NominaModule";
 import RolPagosModule from "@/components/nomina/RolPagosModule";
 import { DatosConfig, Empleado } from "@/types/nomina";
+import { useDatosConfig } from "@/hooks/use-datos-config";
+import { useEmpleados } from "@/hooks/use-empleados";
+import { Toaster } from "@/components/ui/toaster";
 
 const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -16,6 +19,9 @@ const getCurrentMonth = () => {
 };
 
 const Index = () => {
+  const { datos: datosFromDB, loading: loadingDatos } = useDatosConfig();
+  const { empleados: empleadosFromDB, loading: loadingEmpleados } = useEmpleados();
+
   const [datos, setDatos] = useState<DatosConfig>({
     id: "1",
     empresa: "",
@@ -27,11 +33,38 @@ const Index = () => {
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [activeTab, setActiveTab] = useState("datos");
 
+  useEffect(() => {
+    if (datosFromDB) {
+      setDatos(datosFromDB);
+      if (datosFromDB.empresa.trim() !== "") {
+        setActiveTab("nomina");
+      }
+    }
+  }, [datosFromDB]);
+
+  useEffect(() => {
+    if (empleadosFromDB) {
+      setEmpleados(empleadosFromDB);
+    }
+  }, [empleadosFromDB]);
+
   const canAccessNomina = datos.empresa.trim() !== "";
   const canAccessRol = canAccessNomina && empleados.length > 0;
 
+  if (loadingDatos || loadingEmpleados) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
+      <Toaster />
       {activeTab === "datos" ? (
         <main className="min-h-screen flex items-center justify-center px-6 py-12">
           <DatosModule

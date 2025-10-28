@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatosConfig } from "@/types/nomina";
 import { ArrowRight } from "lucide-react";
+import { useDatosConfig } from "@/hooks/use-datos-config";
+import { useToast } from "@/hooks/use-toast";
 
 const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -24,8 +26,11 @@ const isFormComplete = (datos: DatosConfig): boolean => {
 
 export default function DatosModule({ datos, onUpdate, onContinue }: DatosModuleProps) {
   const [localDatos, setLocalDatos] = useState(datos);
+  const { saveDatos } = useDatosConfig();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
 
-  const handleChange = (field: keyof DatosConfig, value: string) => {
+  const handleChange = async (field: keyof DatosConfig, value: string) => {
     const updated = { ...localDatos, [field]: value };
 
     if (field === "mes") {
@@ -34,6 +39,21 @@ export default function DatosModule({ datos, onUpdate, onContinue }: DatosModule
 
     setLocalDatos(updated);
     onUpdate(updated);
+
+    if (isFormComplete(updated)) {
+      setSaving(true);
+      try {
+        await saveDatos(updated);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "No se pudo guardar la configuración",
+          variant: "destructive",
+        });
+      } finally {
+        setSaving(false);
+      }
+    }
   };
 
   const handleContinue = () => {
